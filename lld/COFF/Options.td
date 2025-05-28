@@ -161,6 +161,8 @@ def noentry : F<"noentry">,
 def profile : F<"profile">;
 def repro : F<"Brepro">,
     HelpText<"Use a hash of the executable as the PE header timestamp">;
+def nodbgdirmerge : F<"nodbgdirmerge">,
+    HelpText<"Emit debug directory into separate section">;
 def reproduce : Joined<["/", "-", "/?", "-?"], "reproduce:">,
     MetaVarName<"filename">,
     HelpText<"Write tar file containing inputs and command to reproduce link">;

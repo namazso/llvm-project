@@ -246,8 +246,9 @@ private:
   void getSymbolsFromSections(ObjFile *file,
                               ArrayRef<SectionChunk *> symIdxChunks,
                               std::vector<Symbol *> &symbols);
-  void maybeAddRVATable(SymbolRVASet tableSymbols, StringRef tableSym,
-                        StringRef countSym, bool hasFlag=false);
+  void maybeAddRVATable(OutputSection *sec, SymbolRVASet tableSymbols,
+                        StringRef tableSym, StringRef countSym,
+                        bool hasFlag = false);
   void setSectionPermissions();
   void setECSymbols();
   void writeSections();
@@ -321,6 +322,11 @@ private:
   OutputSection *idataSec;
   OutputSection *edataSec;
   OutputSection *didatSec;
+  OutputSection *cvinfoSec;
+  OutputSection *gehcontSec;
+  OutputSection *gfidsSec;
+  OutputSection *giatsSec;
+  OutputSection *gljmpSec;
   OutputSection *a64xrmSec;
   OutputSection *rsrcSec;
   OutputSection *relocSec;
@@ -1084,6 +1090,11 @@ void Writer::createSections() {
   idataSec = createSection(".idata", data | r);
   edataSec = createSection(".edata", data | r);
   didatSec = createSection(".didat", data | r);
+  cvinfoSec = createSection(".cvinfo", data | r);
+  gehcontSec = createSection(".gehcont", data | r);
+  gfidsSec = createSection(".gfids", data | r);
+  giatsSec = createSection(".giats", data | r);
+  gljmpSec = createSection(".gljmp", data | r);
   if (isArm64EC(ctx.config.machine))
     a64xrmSec = createSection(".a64xrm", data | r);
   rsrcSec = createSection(".rsrc", data | r);
@@ -1212,7 +1223,8 @@ void Writer::createMiscChunks() {
   });
 
   // Create Debug Information Chunks
-  debugInfoSec = config->mingw ? buildidSec : rdataSec;
+  debugInfoSec = config->mingw ? buildidSec
+                               : (config->noDbgDirMerge ? cvinfoSec : rdataSec);
   if (config->buildIDHash != BuildIDHash::None || config->debug ||
       config->repro || config->cetCompat) {
     debugDirectory =
@@ -1970,7 +1982,7 @@ void Writer::createSEHTable() {
   setNoSEHCharacteristic =
       handlers.empty() || !ctx.symtab.findUnderscore("_load_config_used");
 
-  maybeAddRVATable(std::move(handlers), "__safe_se_handler_table",
+  maybeAddRVATable(rdataSec, std::move(handlers), "__safe_se_handler_table",
                    "__safe_se_handler_count");
 }
 
@@ -2139,22 +2151,22 @@ void Writer::createGuardCFTables() {
     if (c.inputChunk->getAlignment() < 16)
       c.inputChunk->setAlignment(16);
 
-  maybeAddRVATable(std::move(addressTakenSyms), "__guard_fids_table",
+  maybeAddRVATable(gfidsSec, std::move(addressTakenSyms), "__guard_fids_table",
                    "__guard_fids_count");
 
   // Add the Guard Address Taken IAT Entry Table (.giats).
-  maybeAddRVATable(std::move(giatsRVASet), "__guard_iat_table",
+  maybeAddRVATable(giatsSec, std::move(giatsRVASet), "__guard_iat_table",
                    "__guard_iat_count");
 
   // Add the longjmp target table unless the user told us not to.
   if (config->guardCF & GuardCFLevel::LongJmp)
-    maybeAddRVATable(std::move(longJmpTargets), "__guard_longjmp_table",
-                     "__guard_longjmp_count");
+    maybeAddRVATable(gljmpSec, std::move(longJmpTargets),
+                     "__guard_longjmp_table", "__guard_longjmp_count");
 
   // Add the ehcont target table unless the user told us not to.
   if (config->guardCF & GuardCFLevel::EHCont)
-    maybeAddRVATable(std::move(ehContTargets), "__guard_eh_cont_table",
-                     "__guard_eh_cont_count");
+    maybeAddRVATable(gehcontSec, std::move(ehContTargets),
+                     "__guard_eh_cont_table", "__guard_eh_cont_count");
 
   // Set __guard_flags, which will be used in the load config to indicate that
   // /guard:cf was enabled.
@@ -2226,8 +2238,9 @@ void Writer::markSymbolsForRVATable(ObjFile *file,
 // Replace the absolute table symbol with a synthetic symbol pointing to
 // tableChunk so that we can emit base relocations for it and resolve section
 // relative relocations.
-void Writer::maybeAddRVATable(SymbolRVASet tableSymbols, StringRef tableSym,
-                              StringRef countSym, bool hasFlag) {
+void Writer::maybeAddRVATable(OutputSection *sec, SymbolRVASet tableSymbols,
+                              StringRef tableSym, StringRef countSym,
+                              bool hasFlag) {
   if (tableSymbols.empty())
     return;
 
@@ -2236,7 +2249,7 @@ void Writer::maybeAddRVATable(SymbolRVASet tableSymbols, StringRef tableSym,
     tableChunk = make<RVAFlagTableChunk>(std::move(tableSymbols));
   else
     tableChunk = make<RVATableChunk>(std::move(tableSymbols));
-  rdataSec->addChunk(tableChunk);
+  sec->addChunk(tableChunk);
 
   ctx.forEachSymtab([&](SymbolTable &symtab) {
     Symbol *t = symtab.findUnderscore(tableSym);

@@ -1897,6 +1897,11 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
     }
   }
 
+  // Handle /nodbgdirmerge
+  if (args.hasArg(OPT_nodbgdirmerge)) {
+    config->noDbgDirMerge = true;
+  }
+
   // Handle /alternatename
   for (auto *arg : args.filtered(OPT_alternatename))
     ctx.symtab.parseAlternateName(arg->getValue());
@@ -2026,6 +2031,10 @@ void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
   parseMerge(".edata=.rdata");
   parseMerge(".xdata=.rdata");
   parseMerge(".00cfg=.rdata");
+  parseMerge(".gfids=.rdata");
+  parseMerge(".giats=.rdata");
+  parseMerge(".gljmp=.rdata");
+  parseMerge(".gids=.rdata");
   parseMerge(".bss=.data");
 
   if (isArm64EC(config->machine))

@@ -311,6 +311,7 @@ struct Configuration {
   bool integrityCheck = false;
   bool killAt = false;
   bool repro = false;
+  bool noDbgDirMerge = false;
   bool swaprunCD = false;
   bool swaprunNet = false;
   bool thinLTOEmitImportsFiles;
